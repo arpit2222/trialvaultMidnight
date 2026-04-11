@@ -1,0 +1,55 @@
+contract LicenseMarket {
+  struct LicenseRequest {
+    patientNullifier: Bytes<32>;
+    fields: Uint<8>;
+    paymentAmount: Uint<128>;
+    createdAt: Uint<64>;
+    fulfilled: Boolean;
+  }
+
+  shielded {
+    disclosureProofs: Map<Uint<64>, Bytes<256>>;
+  }
+
+  ledger licenseRequests: Map<Uint<64>, LicenseRequest>;
+  ledger completedLicenses: Set<Uint<64>>;
+  ledger licenseCount: Counter;
+
+  circuit requestLicense(
+    patientNullifier: Bytes<32>,
+    fields: Uint<8>,
+    paymentAmount: Uint<128>
+  ): Uint<64> {
+    licenseCount.increment();
+    let licenseId = licenseCount.value();
+    let req = LicenseRequest {
+      patientNullifier: patientNullifier,
+      fields: fields,
+      paymentAmount: paymentAmount,
+      createdAt: blockHeight(),
+      fulfilled: false
+    };
+    licenseRequests.insert(licenseId, req);
+    return licenseId;
+  }
+
+  circuit fulfillLicense(
+    licenseId: Uint<64>,
+    disclosureProof: Bytes<256>
+  ): Void {
+    let req = licenseRequests.get(licenseId);
+    assert req.fulfilled == false;
+    disclosureProofs.insert(licenseId, disclosureProof);
+    completedLicenses.insert(licenseId);
+    req.fulfilled = true;
+    licenseRequests.insert(licenseId, req);
+  }
+
+  circuit revokeActiveLicense(licenseId: Uint<64>): Void {
+    let req = licenseRequests.get(licenseId);
+    assert req.fulfilled == false;
+    completedLicenses.insert(licenseId);
+    req.fulfilled = true;
+    licenseRequests.insert(licenseId, req);
+  }
+}

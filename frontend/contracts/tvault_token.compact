@@ -1,0 +1,45 @@
+contract TvaultToken {
+  ledger balances: Map<Address, Uint<128>>;
+  ledger totalSupply: Uint<128>;
+  ledger allowances: Map<Address, Map<Address, Uint<128>>>;
+
+  circuit mint(to: Address, amount: Uint<128>): Void {
+    let current = balances.get_or(to, 0);
+    balances.insert(to, current + amount);
+    totalSupply = totalSupply + amount;
+  }
+
+  circuit transfer(to: Address, amount: Uint<128>): Void {
+    let sender = caller();
+    let fromBal = balances.get_or(sender, 0);
+    assert fromBal >= amount;
+    balances.insert(sender, fromBal - amount);
+    let toBal = balances.get_or(to, 0);
+    balances.insert(to, toBal + amount);
+  }
+
+  circuit approve(spender: Address, amount: Uint<128>): Void {
+    let owner = caller();
+    let inner = allowances.get_or(owner, Map<Address, Uint<128>>::new());
+    inner.insert(spender, amount);
+    allowances.insert(owner, inner);
+  }
+
+  circuit transferFrom(from: Address, to: Address, amount: Uint<128>): Void {
+    let spender = caller();
+    let fromBal = balances.get_or(from, 0);
+    assert fromBal >= amount;
+    let inner = allowances.get_or(from, Map<Address, Uint<128>>::new());
+    let allowed = inner.get_or(spender, 0);
+    assert allowed >= amount;
+    inner.insert(spender, allowed - amount);
+    allowances.insert(from, inner);
+    balances.insert(from, fromBal - amount);
+    let toBal = balances.get_or(to, 0);
+    balances.insert(to, toBal + amount);
+  }
+
+  circuit balanceOf(addr: Address): Uint<128> {
+    return balances.get_or(addr, 0);
+  }
+}

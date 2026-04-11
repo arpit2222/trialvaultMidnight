@@ -1,0 +1,61 @@
+# ─── Dependencies ────────────────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ─── Next.js ─────────────────────────────────────────────────────────────────
+.next/
+out/
+build/
+dist/
+.claude/
+
+# ─── Environment variables — NEVER commit these ───────────────────────────────
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.production
+# Keep .env.example committed (it documents required vars with no real values)
+
+# ─── Secrets & keys ──────────────────────────────────────────────────────────
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ─── Contract deployment artifacts (contain testnet addresses) ───────────────
+frontend/contracts/deploy/addresses.json
+frontend/contracts/build/
+
+# ─── OS & editor ─────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+*.log
+
+# ─── Testing ─────────────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ─── TypeScript ──────────────────────────────────────────────────────────────
+*.tsbuildinfo
+next-env.d.ts
+
+# ─── Misc ────────────────────────────────────────────────────────────────────
+.tmp/
+.cache/
+*.local

@@ -1,0 +1,46 @@
+contract PatientVault {
+  struct ConsentToken {
+    trialId: Uint<64>;
+    issuedAt: Uint<64>;
+    revoked: Boolean;
+  }
+
+  shielded {
+    consentTokens: Map<Uint<64>, ConsentToken>;
+    ipfsCidHash: Bytes<32>;
+    active: Boolean;
+  }
+
+  ledger usedNullifiers: Set<Bytes<32>>;
+  ledger totalPatients: Counter;
+
+  circuit registerVault(cidHash: Bytes<32>): Void {
+    assert !active;
+    active = true;
+    ipfsCidHash = cidHash;
+    totalPatients.increment();
+  }
+
+  circuit issueConsentToken(trialId: Uint<64>, nullifier: Bytes<32>): Void {
+    assert active;
+    assert !usedNullifiers.contains(nullifier);
+    usedNullifiers.insert(nullifier);
+    let token = ConsentToken {
+      trialId: trialId,
+      issuedAt: blockHeight(),
+      revoked: false
+    };
+    consentTokens.insert(trialId, token);
+  }
+
+  circuit revokeConsent(trialId: Uint<64>): Void {
+    let token = consentTokens.get(trialId);
+    assert token.revoked == false;
+    token.revoked = true;
+    consentTokens.insert(trialId, token);
+  }
+
+  circuit isNullifierUsed(nullifier: Bytes<32>): Boolean {
+    return usedNullifiers.contains(nullifier);
+  }
+}

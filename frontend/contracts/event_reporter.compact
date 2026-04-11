@@ -1,0 +1,30 @@
+contract EventReporter {
+  witness reporterSecret: Bytes<32>;
+
+  ledger eventCounts: Map<Uint<64>, Counter>;
+  ledger severityTotals: Map<Uint<64>, Uint<32>>;
+  ledger alertsFired: Set<Uint<64>>;
+  ledger thresholds: Map<Uint<64>, Uint<32>>;
+
+  circuit submitEvent(
+    trialId: Uint<64>,
+    eventCode: Uint<8>,
+    severity: Uint<8>
+  ): Void {
+    let counter = eventCounts.get_or(trialId, Counter::new());
+    counter.increment();
+    eventCounts.insert(trialId, counter);
+    let total = severityTotals.get_or(trialId, 0);
+    severityTotals.insert(trialId, total + severity);
+  }
+
+  circuit checkThreshold(trialId: Uint<64>): Boolean {
+    let threshold = thresholds.get_or(trialId, 10);
+    let count = eventCounts.get_or(trialId, Counter::new()).value();
+    if count >= threshold {
+      alertsFired.insert(trialId);
+      return true;
+    }
+    return false;
+  }
+}

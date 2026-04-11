@@ -1,0 +1,40 @@
+contract ResultIntegrity {
+  struct ResultRecord {
+    resultsHash: Bytes<32>;
+    publishedAt: Uint<64>;
+  }
+
+  ledger protocolHashes: Map<Uint<64>, Bytes<32>>;
+  ledger datasetRoots: Map<Uint<64>, Bytes<32>>;
+  ledger publishedResults: Map<Uint<64>, ResultRecord>;
+  ledger verificationStatus: Map<Uint<64>, Boolean>;
+
+  circuit commitProtocol(trialId: Uint<64>, protocolHash: Bytes<32>): Void {
+    protocolHashes.insert(trialId, protocolHash);
+  }
+
+  circuit commitDataset(trialId: Uint<64>, merkleRoot: Bytes<32>): Void {
+    datasetRoots.insert(trialId, merkleRoot);
+  }
+
+  circuit publishResults(
+    trialId: Uint<64>,
+    resultsHash: Bytes<32>,
+    merkleProof: Bytes<512>
+  ): Boolean {
+    let root = datasetRoots.get(trialId);
+    let verified = verifyMerkle(resultsHash, merkleProof, root);
+    let record = ResultRecord { resultsHash: resultsHash, publishedAt: blockHeight() };
+    publishedResults.insert(trialId, record);
+    verificationStatus.insert(trialId, verified);
+    return verified;
+  }
+
+  circuit verifyIntegrity(trialId: Uint<64>, resultsHash: Bytes<32>): Boolean {
+    let record = publishedResults.get(trialId);
+    if record.resultsHash != resultsHash {
+      return false;
+    }
+    return verificationStatus.get_or(trialId, false);
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "@midnight-ntwrk/midnight-js-crypto",
+  "version": "0.0.0",
+  "main": "index.js",
+  "types": "index.d.ts"
+}

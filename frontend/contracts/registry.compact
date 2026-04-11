@@ -1,0 +1,25 @@
+contract Registry {
+  ledger roles: Map<Address, Uint<2>>;
+  ledger pharmaCount: Counter;
+  ledger patientCount: Counter;
+
+  circuit registerAsPharma(): Void {
+    let sender = caller();
+    let current = roles.get_or(sender, 0);
+    assert current == 0;
+    roles.insert(sender, 1);
+    pharmaCount.increment();
+  }
+
+  circuit registerAsPatient(): Void {
+    let sender = caller();
+    let current = roles.get_or(sender, 0);
+    assert current == 0;
+    roles.insert(sender, 2);
+    patientCount.increment();
+  }
+
+  circuit getRole(addr: Address): Uint<2> {
+    return roles.get_or(addr, 0);
+  }
+}
