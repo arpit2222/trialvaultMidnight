@@ -64,7 +64,7 @@ export default function PatientTrialDetail() {
         <Card className="border-white/10 bg-white/5 p-6">
           <h2 className="text-lg font-semibold text-white">Privacy guarantee</h2>
           <p className="text-sm text-muted-foreground">
-            Exact criteria values are hashed — even we don't know them. Proofs reveal only eligibility.
+            Exact criteria values are hashed — even we don&apos;t know them. Proofs reveal only eligibility.
           </p>
         </Card>
       </div>
@@ -78,7 +78,7 @@ export default function PatientTrialDetail() {
                 Age: {isEligible ? "In range ✓" : "Pending"} · Diagnosis: {isEligible ? "Matched ✓" : "Pending"}
               </p>
               <p className="text-xs text-muted-foreground">
-                Exact criteria values are hashed — even we don't know them.
+                Exact criteria values are hashed — even we don&apos;t know them.
               </p>
             </div>
 

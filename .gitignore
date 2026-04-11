@@ -26,8 +26,8 @@ dist/
 *.pfx
 
 # ─── Contract deployment artifacts (contain testnet addresses) ───────────────
-frontend/contracts/deploy/addresses.json
-frontend/contracts/build/
+contracts/deploy/addresses.json
+contracts/build/
 
 # ─── OS & editor ─────────────────────────────────────────────────────────────
 .DS_Store
