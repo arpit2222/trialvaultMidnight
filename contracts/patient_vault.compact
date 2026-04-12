@@ -1,46 +1,31 @@
-contract PatientVault {
-  struct ConsentToken {
-    trialId: Uint<64>;
-    issuedAt: Uint<64>;
-    revoked: Boolean;
-  }
+pragma language_version >= 0.22;
 
-  shielded {
-    consentTokens: Map<Uint<64>, ConsentToken>;
-    ipfsCidHash: Bytes<32>;
-    active: Boolean;
-  }
+import CompactStandardLibrary;
 
-  ledger usedNullifiers: Set<Bytes<32>>;
-  ledger totalPatients: Counter;
+export ledger usedNullifiers: Set<Bytes<32>>;
+export ledger patientCount: Counter;
+export ledger vaultHashes: Map<Bytes<32>, Bytes<32>>;
+export ledger consentGiven: Map<Bytes<32>, Uint<64>>;
+export ledger consentRevoked: Set<Bytes<32>>;
 
-  circuit registerVault(cidHash: Bytes<32>): Void {
-    assert !active;
-    active = true;
-    ipfsCidHash = cidHash;
-    totalPatients.increment();
-  }
+export circuit registerVault(userId: Bytes<32>, cidHash: Bytes<32>): [] {
+  assert(!vaultHashes.member(disclose(userId)), "Vault already exists");
+  vaultHashes.insert(disclose(userId), disclose(cidHash));
+  patientCount += 1;
+}
 
-  circuit issueConsentToken(trialId: Uint<64>, nullifier: Bytes<32>): Void {
-    assert active;
-    assert !usedNullifiers.contains(nullifier);
-    usedNullifiers.insert(nullifier);
-    let token = ConsentToken {
-      trialId: trialId,
-      issuedAt: blockHeight(),
-      revoked: false
-    };
-    consentTokens.insert(trialId, token);
-  }
+export circuit issueConsent(userId: Bytes<32>, trialId: Uint<64>, nullifier: Bytes<32>): [] {
+  assert(vaultHashes.member(disclose(userId)), "No vault");
+  assert(!usedNullifiers.member(disclose(nullifier)), "Nullifier reused");
+  usedNullifiers.insert(disclose(nullifier));
+  consentGiven.insert(disclose(userId), disclose(trialId));
+}
 
-  circuit revokeConsent(trialId: Uint<64>): Void {
-    let token = consentTokens.get(trialId);
-    assert token.revoked == false;
-    token.revoked = true;
-    consentTokens.insert(trialId, token);
-  }
+export circuit revokeConsent(userId: Bytes<32>): [] {
+  assert(consentGiven.member(disclose(userId)), "No consent");
+  consentRevoked.insert(disclose(userId));
+}
 
-  circuit isNullifierUsed(nullifier: Bytes<32>): Boolean {
-    return usedNullifiers.contains(nullifier);
-  }
+export circuit isNullifierUsed(nullifier: Bytes<32>): Boolean {
+  return usedNullifiers.member(disclose(nullifier));
 }

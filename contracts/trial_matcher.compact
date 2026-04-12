@@ -1,70 +1,61 @@
-contract TrialMatcher {
-  struct Trial {
-    name: Bytes<64>;
-    protocolHash: Bytes<32>;
-    minAge: Uint<8>;
-    maxAge: Uint<8>;
-    diagnosisCode: Uint<16>;
-    labMin1: Uint<32>;
-    labMax1: Uint<32>;
+pragma language_version >= 0.22;
+
+import CompactStandardLibrary;
+
+struct Trial {
+  protocolHash: Bytes<32>,
+  minAge: Uint<8>,
+  maxAge: Uint<8>,
+  diagnosisCode: Uint<16>
+}
+
+witness getPatientAge(): Uint<8>;
+witness getPatientDiagnosis(): Uint<16>;
+
+export ledger trials: Map<Uint<64>, Trial>;
+export ledger eligibleCounts: Map<Uint<64>, Counter>;
+export ledger usedNullifiers: Set<Bytes<32>>;
+export ledger nextTrialId: Uint<64>;
+
+export circuit createTrial(
+  protocolHash: Bytes<32>,
+  minAge: Uint<8>,
+  maxAge: Uint<8>,
+  diagnosisCode: Uint<16>
+): Uint<64> {
+  const id: Uint<64> = (nextTrialId + 1) as Uint<64>;
+  nextTrialId = disclose(id);
+  const trial = Trial {
+    protocolHash: disclose(protocolHash),
+    minAge: disclose(minAge),
+    maxAge: disclose(maxAge),
+    diagnosisCode: disclose(diagnosisCode)
+  };
+  trials.insert(disclose(id), trial);
+  eligibleCounts.insert(disclose(id), default<Counter>);
+  return id;
+}
+
+export circuit proveEligibility(
+  trialId: Uint<64>,
+  nullifier: Bytes<32>
+): Boolean {
+  assert(trials.member(disclose(trialId)), "Trial not found");
+  assert(!usedNullifiers.member(disclose(nullifier)), "Already enrolled");
+  const trial: Trial = trials.lookup(disclose(trialId));
+  const age: Uint<8> = getPatientAge();
+  const diagnosis: Uint<16> = getPatientDiagnosis();
+  assert(age >= trial.minAge, "Below minimum age");
+  assert(age <= trial.maxAge, "Above maximum age");
+  assert(diagnosis == trial.diagnosisCode, "Diagnosis mismatch");
+  usedNullifiers.insert(disclose(nullifier));
+  eligibleCounts.lookup(disclose(trialId)) += 1;
+  return true;
+}
+
+export circuit getEligibleCount(trialId: Uint<64>): Uint<64> {
+  if (eligibleCounts.member(disclose(trialId))) {
+    return eligibleCounts.lookup(disclose(trialId));
   }
-
-  witness patientAge: Uint<8>;
-  witness diagnosisCode: Uint<16>;
-  witness labValue1: Uint<32>;
-  witness labValue2: Uint<32>;
-  witness nullifierSecret: Bytes<32>;
-
-  ledger trials: Map<Uint<64>, Trial>;
-  ledger eligibleCounts: Map<Uint<64>, Counter>;
-  ledger usedNullifiers: Set<Bytes<32>>;
-  ledger trialCount: Counter;
-
-  circuit createTrial(
-    name: Bytes<64>,
-    protocolHash: Bytes<32>,
-    minAge: Uint<8>,
-    maxAge: Uint<8>,
-    diagnosisCode: Uint<16>,
-    labMin1: Uint<32>,
-    labMax1: Uint<32>
-  ): Uint<64> {
-    trialCount.increment();
-    let id = trialCount.value();
-    let trial = Trial {
-      name: name,
-      protocolHash: protocolHash,
-      minAge: minAge,
-      maxAge: maxAge,
-      diagnosisCode: diagnosisCode,
-      labMin1: labMin1,
-      labMax1: labMax1
-    };
-    trials.insert(id, trial);
-    return id;
-  }
-
-  circuit proveEligibility(
-    trialId: Uint<64>,
-    protocolId: Bytes<32>
-  ): Boolean {
-    let trial = trials.get(trialId);
-    assert patientAge >= trial.minAge;
-    assert patientAge <= trial.maxAge;
-    assert diagnosisCode == trial.diagnosisCode;
-    assert labValue1 >= trial.labMin1;
-    assert labValue1 <= trial.labMax1;
-    let nullifier = hash(nullifierSecret, protocolId);
-    assert !usedNullifiers.contains(nullifier);
-    usedNullifiers.insert(nullifier);
-    let counter = eligibleCounts.get_or(trialId, Counter::new());
-    counter.increment();
-    eligibleCounts.insert(trialId, counter);
-    return true;
-  }
-
-  circuit getEligibleCount(trialId: Uint<64>): Uint<32> {
-    let counter = eligibleCounts.get_or(trialId, Counter::new());
-    return counter.value();
-  }
+  return 0;
 }

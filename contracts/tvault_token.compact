@@ -1,45 +1,36 @@
-contract TvaultToken {
-  ledger balances: Map<Address, Uint<128>>;
-  ledger totalSupply: Uint<128>;
-  ledger allowances: Map<Address, Map<Address, Uint<128>>>;
+pragma language_version >= 0.22;
 
-  circuit mint(to: Address, amount: Uint<128>): Void {
-    let current = balances.get_or(to, 0);
-    balances.insert(to, current + amount);
-    totalSupply = totalSupply + amount;
-  }
+import CompactStandardLibrary;
 
-  circuit transfer(to: Address, amount: Uint<128>): Void {
-    let sender = caller();
-    let fromBal = balances.get_or(sender, 0);
-    assert fromBal >= amount;
-    balances.insert(sender, fromBal - amount);
-    let toBal = balances.get_or(to, 0);
-    balances.insert(to, toBal + amount);
-  }
+export ledger balances: Map<Bytes<32>, Uint<64>>;
+export ledger totalMinted: Counter;
 
-  circuit approve(spender: Address, amount: Uint<128>): Void {
-    let owner = caller();
-    let inner = allowances.get_or(owner, Map<Address, Uint<128>>::new());
-    inner.insert(spender, amount);
-    allowances.insert(owner, inner);
+export circuit mint(to: Bytes<32>, amount: Uint<16>): [] {
+  if (balances.member(disclose(to))) {
+    const current: Uint<64> = balances.lookup(disclose(to));
+    balances.insert(disclose(to), disclose((current + amount) as Uint<64>));
+  } else {
+    balances.insert(disclose(to), disclose(amount as Uint<64>));
   }
+  totalMinted += disclose(amount);
+}
 
-  circuit transferFrom(from: Address, to: Address, amount: Uint<128>): Void {
-    let spender = caller();
-    let fromBal = balances.get_or(from, 0);
-    assert fromBal >= amount;
-    let inner = allowances.get_or(from, Map<Address, Uint<128>>::new());
-    let allowed = inner.get_or(spender, 0);
-    assert allowed >= amount;
-    inner.insert(spender, allowed - amount);
-    allowances.insert(from, inner);
-    balances.insert(from, fromBal - amount);
-    let toBal = balances.get_or(to, 0);
-    balances.insert(to, toBal + amount);
+export circuit transfer(sender: Bytes<32>, to: Bytes<32>, amount: Uint<16>): [] {
+  assert(balances.member(disclose(sender)), "No balance");
+  const fromBal: Uint<64> = balances.lookup(disclose(sender));
+  assert(fromBal >= amount, "Insufficient balance");
+  balances.insert(disclose(sender), disclose((fromBal - amount) as Uint<64>));
+  if (balances.member(disclose(to))) {
+    const toBal: Uint<64> = balances.lookup(disclose(to));
+    balances.insert(disclose(to), disclose((toBal + amount) as Uint<64>));
+  } else {
+    balances.insert(disclose(to), disclose(amount as Uint<64>));
   }
+}
 
-  circuit balanceOf(addr: Address): Uint<128> {
-    return balances.get_or(addr, 0);
+export circuit balanceOf(owner: Bytes<32>): Uint<64> {
+  if (balances.member(disclose(owner))) {
+    return balances.lookup(disclose(owner));
   }
+  return 0;
 }

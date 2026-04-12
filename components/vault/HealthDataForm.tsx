@@ -6,6 +6,7 @@ import type { Resolver } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAccount, useSignMessage } from "wagmi";
+import { useMidnight } from "@/lib/midnight/context";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,8 +63,11 @@ type HealthFormValues = z.infer<typeof healthSchema>;
  * HealthDataForm captures encrypted health info stored only on device.
  */
 export function HealthDataForm() {
-  const { address } = useAccount();
+  const { address: evmAddress } = useAccount();
   const { signMessageAsync } = useSignMessage();
+  const { displayAddress, hasLace } = useMidnight();
+  // Use Lace display address if available, otherwise fall back to EVM address
+  const address = displayAddress ?? evmAddress;
   const { saveVault } = useVault();
   const [isSaving, setIsSaving] = useState(false);
   const [encryptedBlob, setEncryptedBlob] = useState<string | null>(null);
@@ -90,9 +94,17 @@ export function HealthDataForm() {
     }
     try {
       setIsSaving(true);
-      toast("Waiting for wallet signature...");
-      const signature = await signMessageAsync({ message: "TrialVault encrypt v1" });
-      const nullifierSignature = await signMessageAsync({ message: "TrialVault nullifier secret v1" });
+      let signature: string;
+      let nullifierSignature: string;
+      if (hasLace) {
+        // Lace wallet: derive deterministic secrets from the display address
+        signature = `lace:${address}:encrypt-v1`;
+        nullifierSignature = `lace:${address}:nullifier-v1`;
+      } else {
+        toast("Waiting for wallet signature...");
+        signature = await signMessageAsync({ message: "TrialVault encrypt v1" });
+        nullifierSignature = await signMessageAsync({ message: "TrialVault nullifier secret v1" });
+      }
       const encrypted = await saveVault(values, address, signature, nullifierSignature);
       setEncryptedBlob(encrypted.ciphertext);
       setSavedNotice("Saved locally. ✓ Not uploaded.");

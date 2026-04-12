@@ -1,30 +1,32 @@
-contract EventReporter {
-  witness reporterSecret: Bytes<32>;
+pragma language_version >= 0.22;
 
-  ledger eventCounts: Map<Uint<64>, Counter>;
-  ledger severityTotals: Map<Uint<64>, Uint<32>>;
-  ledger alertsFired: Set<Uint<64>>;
-  ledger thresholds: Map<Uint<64>, Uint<32>>;
+import CompactStandardLibrary;
 
-  circuit submitEvent(
-    trialId: Uint<64>,
-    eventCode: Uint<8>,
-    severity: Uint<8>
-  ): Void {
-    let counter = eventCounts.get_or(trialId, Counter::new());
-    counter.increment();
-    eventCounts.insert(trialId, counter);
-    let total = severityTotals.get_or(trialId, 0);
-    severityTotals.insert(trialId, total + severity);
+export ledger eventCounts: Map<Uint<64>, Counter>;
+export ledger alertsFired: Set<Uint<64>>;
+export ledger totalEvents: Counter;
+
+export circuit initTrial(trialId: Uint<64>): [] {
+  eventCounts.insert(disclose(trialId), default<Counter>);
+}
+
+export circuit submitEvent(trialId: Uint<64>, severity: Uint<8>): [] {
+  assert(eventCounts.member(disclose(trialId)), "Trial not initialized");
+  eventCounts.lookup(disclose(trialId)) += 1;
+  totalEvents += 1;
+}
+
+export circuit flagAlert(trialId: Uint<64>): [] {
+  alertsFired.insert(disclose(trialId));
+}
+
+export circuit isAlerted(trialId: Uint<64>): Boolean {
+  return alertsFired.member(disclose(trialId));
+}
+
+export circuit getEventCount(trialId: Uint<64>): Uint<64> {
+  if (eventCounts.member(disclose(trialId))) {
+    return eventCounts.lookup(disclose(trialId));
   }
-
-  circuit checkThreshold(trialId: Uint<64>): Boolean {
-    let threshold = thresholds.get_or(trialId, 10);
-    let count = eventCounts.get_or(trialId, Counter::new()).value();
-    if count >= threshold {
-      alertsFired.insert(trialId);
-      return true;
-    }
-    return false;
-  }
+  return 0;
 }

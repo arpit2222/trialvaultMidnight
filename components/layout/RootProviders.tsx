@@ -6,6 +6,7 @@ import { WagmiProvider } from "wagmi";
 import { RainbowKitProvider, darkTheme, lightTheme } from "@rainbow-me/rainbowkit";
 import { Toaster } from "sonner";
 import { wagmiConfig } from "@/lib/wagmi/config";
+import { MidnightProvider } from "@/lib/midnight/context";
 
 type ThemeMode = "dark" | "light";
 
@@ -39,18 +40,20 @@ export function RootProviders({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
-        <ThemeContext.Provider value={value}>
-          <RainbowKitProvider
-            theme={
-              mode === "dark"
-                ? darkTheme({ accentColor: "#1A6FBF" })
-                : lightTheme({ accentColor: "#1A6FBF" })
-            }
-          >
-            {children}
-            <Toaster richColors position="top-right" />
-          </RainbowKitProvider>
-        </ThemeContext.Provider>
+        <MidnightProvider>
+          <ThemeContext.Provider value={value}>
+            <RainbowKitProvider
+              theme={
+                mode === "dark"
+                  ? darkTheme({ accentColor: "#1A6FBF" })
+                  : lightTheme({ accentColor: "#1A6FBF" })
+              }
+            >
+              {children}
+              <Toaster richColors position="top-right" />
+            </RainbowKitProvider>
+          </ThemeContext.Provider>
+        </MidnightProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );

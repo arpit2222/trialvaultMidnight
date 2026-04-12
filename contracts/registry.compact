@@ -1,25 +1,27 @@
-contract Registry {
-  ledger roles: Map<Address, Uint<2>>;
-  ledger pharmaCount: Counter;
-  ledger patientCount: Counter;
+pragma language_version >= 0.22;
 
-  circuit registerAsPharma(): Void {
-    let sender = caller();
-    let current = roles.get_or(sender, 0);
-    assert current == 0;
-    roles.insert(sender, 1);
-    pharmaCount.increment();
-  }
+import CompactStandardLibrary;
 
-  circuit registerAsPatient(): Void {
-    let sender = caller();
-    let current = roles.get_or(sender, 0);
-    assert current == 0;
-    roles.insert(sender, 2);
-    patientCount.increment();
-  }
+// Role map: Bytes<32> userId → Uint<8> role (0=none, 1=pharma, 2=patient)
+export ledger roles: Map<Bytes<32>, Uint<8>>;
+export ledger pharmaCount: Counter;
+export ledger patientCount: Counter;
 
-  circuit getRole(addr: Address): Uint<2> {
-    return roles.get_or(addr, 0);
+export circuit registerAsPharma(userId: Bytes<32>): [] {
+  assert(!roles.member(disclose(userId)), "Already registered");
+  roles.insert(disclose(userId), 1);
+  pharmaCount += 1;
+}
+
+export circuit registerAsPatient(userId: Bytes<32>): [] {
+  assert(!roles.member(disclose(userId)), "Already registered");
+  roles.insert(disclose(userId), 2);
+  patientCount += 1;
+}
+
+export circuit getRole(userId: Bytes<32>): Uint<8> {
+  if (roles.member(disclose(userId))) {
+    return roles.lookup(disclose(userId));
   }
+  return 0;
 }

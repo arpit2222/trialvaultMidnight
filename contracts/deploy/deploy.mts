@@ -58,10 +58,11 @@ setNetworkId('preprod');
 // ---------------------------------------------------------------------------
 
 const CONFIG = {
-  indexer: 'https://indexer.preprod.midnight.network/api/v3/graphql',
-  indexerWS: 'wss://indexer.preprod.midnight.network/api/v3/graphql/ws',
-  node: 'https://rpc.preprod.midnight.network',
-  proofServer: 'http://127.0.0.1:6300',
+  indexer: process.env.NEXT_PUBLIC_MIDNIGHT_INDEXER_URL || 'https://indexer.preprod.midnight.network/api/v4/graphql',
+  indexerWS: (process.env.NEXT_PUBLIC_MIDNIGHT_INDEXER_URL || 'https://indexer.preprod.midnight.network/api/v4/graphql')
+    .replace(/^https/, 'wss').replace(/^http/, 'ws').replace(/\/graphql$/, '/graphql/ws'),
+  node: process.env.NEXT_PUBLIC_MIDNIGHT_RPC_URL || 'https://rpc.preprod.midnight.network',
+  proofServer: process.env.MIDNIGHT_PROOF_SERVER_URL || 'http://127.0.0.1:6300',
   faucetUrl: 'https://faucet.preprod.midnight.network/',
 };
 
@@ -132,13 +133,11 @@ async function createWallet(seed: string) {
     indexerClientConnection: { indexerHttpUrl: CONFIG.indexer, indexerWsUrl: CONFIG.indexerWS },
     provingServerUrl: new URL(CONFIG.proofServer),
     relayURL: new URL(CONFIG.node.replace(/^http/, 'ws')),
+    costParameters: { additionalFeeOverhead: 300_000_000_000_000n, feeBlocksMargin: 5 },
   };
 
-  const walletFacade = await WalletFacade.init({
-    configuration: {
-      ...walletConfig,
-      costParameters: { additionalFeeOverhead: 300_000_000_000_000n, feeBlocksMargin: 5 },
-    },
+  const wallet = await WalletFacade.init({
+    configuration: walletConfig,
     shielded: (config) => ShieldedWallet(config).startWithSecretKeys(shieldedSecretKeys),
     unshielded: (config) => UnshieldedWallet({
       ...config,
@@ -149,9 +148,9 @@ async function createWallet(seed: string) {
       ledger.LedgerParameters.initialParameters().dust,
     ),
   });
-  await walletFacade.start(shieldedSecretKeys, dustSecretKey);
+  await wallet.start(shieldedSecretKeys, dustSecretKey);
 
-  return { wallet: walletFacade, shieldedSecretKeys, dustSecretKey, unshieldedKeystore };
+  return { wallet, shieldedSecretKeys, dustSecretKey, unshieldedKeystore };
 }
 
 async function createProviders(walletCtx: Awaited<ReturnType<typeof createWallet>>, zkConfigPath: string, stateStoreName: string) {
@@ -222,6 +221,7 @@ async function deployOne(
   }
 
   const ContractModule = await import(pathToFileURL(contractModulePath).href);
+
   const compiledContract = CompiledContract.make(contractDef.key, ContractModule.Contract).pipe(
     contractDef.witnesses ? CompiledContract.withWitnesses(contractDef.witnesses) : CompiledContract.withVacantWitnesses,
     CompiledContract.withCompiledFileAssets(zkConfigPath),
@@ -298,10 +298,26 @@ async function main() {
   console.log('  Connecting wallet to Preprod...');
   const walletCtx = await createWallet(seedHex);
 
-  console.log('  Syncing...');
-  const state = await Rx.firstValueFrom(
-    walletCtx.wallet.state().pipe(Rx.throttleTime(5000), Rx.filter(s => s.isSynced))
-  );
+  console.log('  Syncing (this can take 2-5 minutes on first run)...');
+  // Log every state emission
+  const progressSub = walletCtx.wallet.state().pipe(
+    Rx.throttleTime(5000),
+  ).subscribe((s: any) => {
+    const sh = s?.shielded?.state?.progress;
+    const du = s?.dust?.state?.progress;
+    const un = s?.unshielded?.progress;
+    process.stdout.write(
+      `\r  isSynced=${s.isSynced} sh=[${sh?.appliedIndex}/${sh?.sourceIndex}] du=[${du?.appliedIndex}/${du?.sourceIndex}] un=[${un?.appliedId}/${un?.highestTransactionId}]    `
+    );
+  });
+
+  let state: any;
+  try {
+    state = await walletCtx.wallet.waitForSyncedState();
+  } finally {
+    progressSub.unsubscribe();
+  }
+  process.stdout.write('\n');
   const address = walletCtx.unshieldedKeystore.getBech32Address();
   const balance = state.unshielded.balances[unshieldedToken().raw] ?? 0n;
   console.log(`  Address: ${address}`);
@@ -382,6 +398,9 @@ async function main() {
 }
 
 main().catch(err => {
-  console.error('\n❌', err?.message || err);
+  console.error('\n❌ Deployment failed:');
+  console.error(err?.message || JSON.stringify(err) || String(err));
+  if (err?.cause) console.error('  cause:', err.cause?.message || JSON.stringify(err.cause));
+  if (err?.stack) console.error(err.stack);
   process.exit(1);
 });

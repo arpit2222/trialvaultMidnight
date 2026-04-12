@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from "react";
-import { useAccount } from "wagmi";
+import { useMidnight } from "@/lib/midnight/context";
 import { encryptHealthData } from "@/lib/crypto/encrypt";
 import { sha256 } from "@/lib/crypto/hash";
 import { computeWitnesses } from "@/lib/midnight/witnesses";
@@ -11,7 +11,7 @@ async function deriveNullifierSecret(signature: string): Promise<Uint8Array> {
 }
 
 export function useVault() {
-  const { isConnected } = useAccount();
+  const { isConnected } = useMidnight();
   const { witnesses, encryptedVault, isVaultReady, setWitnesses, setEncryptedVault, clearWitnesses } =
     useWitnessStore();
 

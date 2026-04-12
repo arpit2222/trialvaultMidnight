@@ -38,8 +38,8 @@ import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-p
 import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
 import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
 import { setNetworkId, getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-import * as ledger from '@midnight-ntwrk/ledger-v8';
-import { unshieldedToken } from '@midnight-ntwrk/ledger-v8';
+import * as ledger from '@midnight-ntwrk/ledger-v7';
+import { unshieldedToken } from '@midnight-ntwrk/ledger-v7';
 import { WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
 import { DustWallet } from '@midnight-ntwrk/wallet-sdk-dust-wallet';
 import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk-hd';
@@ -75,16 +75,13 @@ const ADDRESSES_FILE = path.join(__dirname, 'addresses.json');
 // ---------------------------------------------------------------------------
 
 const CONTRACTS = [
-  { key: 'tvaultToken',     dir: 'tvault_token',    privateState: false, witnesses: null },
-  { key: 'registry',        dir: 'registry',         privateState: false, witnesses: null },
-  { key: 'patientVault',    dir: 'patient_vault',    privateState: true,  witnesses: null },
-  { key: 'trialMatcher',    dir: 'trial_matcher',    privateState: false, witnesses: {
-    getPatientAge:      (ctx: any) => [ctx.privateState, 0n],
-    getPatientDiagnosis:(ctx: any) => [ctx.privateState, 0n],
-  }},
-  { key: 'licenseMarket',   dir: 'license_market',   privateState: false, witnesses: null },
-  { key: 'resultIntegrity', dir: 'result_integrity', privateState: false, witnesses: null },
-  { key: 'eventReporter',   dir: 'event_reporter',   privateState: false, witnesses: null },
+  { key: 'tvaultToken',     dir: 'tvault_token',    privateState: false },
+  { key: 'registry',        dir: 'registry',         privateState: false },
+  { key: 'patientVault',    dir: 'patient_vault',    privateState: true  },
+  { key: 'trialMatcher',    dir: 'trial_matcher',    privateState: false },
+  { key: 'licenseMarket',   dir: 'license_market',   privateState: false },
+  { key: 'resultIntegrity', dir: 'result_integrity', privateState: false },
+  { key: 'eventReporter',   dir: 'event_reporter',   privateState: false },
 ] as const;
 
 type ContractKey = typeof CONTRACTS[number]['key'];
@@ -134,24 +131,43 @@ async function createWallet(seed: string) {
     relayURL: new URL(CONFIG.node.replace(/^http/, 'ws')),
   };
 
-  const walletFacade = await WalletFacade.init({
-    configuration: {
-      ...walletConfig,
-      costParameters: { additionalFeeOverhead: 300_000_000_000_000n, feeBlocksMargin: 5 },
-    },
-    shielded: (config) => ShieldedWallet(config).startWithSecretKeys(shieldedSecretKeys),
-    unshielded: (config) => UnshieldedWallet({
-      ...config,
-      txHistoryStorage: new InMemoryTransactionHistoryStorage(),
-    }).startWithPublicKey(PublicKey.fromKeyStore(unshieldedKeystore)),
-    dust: (config) => DustWallet(config).startWithSecretKey(
-      dustSecretKey,
-      ledger.LedgerParameters.initialParameters().dust,
-    ),
-  });
-  await walletFacade.start(shieldedSecretKeys, dustSecretKey);
+  const shieldedWallet = ShieldedWallet(walletConfig).startWithSecretKeys(shieldedSecretKeys);
+  const unshieldedWallet = UnshieldedWallet({
+    networkId,
+    indexerClientConnection: walletConfig.indexerClientConnection,
+    txHistoryStorage: new InMemoryTransactionHistoryStorage(),
+  }).startWithPublicKey(PublicKey.fromKeyStore(unshieldedKeystore));
+  const dustWallet = DustWallet({
+    ...walletConfig,
+    costParameters: { additionalFeeOverhead: 300_000_000_000_000n, feeBlocksMargin: 5 },
+  }).startWithSecretKey(dustSecretKey, ledger.LedgerParameters.initialParameters().dust);
 
-  return { wallet: walletFacade, shieldedSecretKeys, dustSecretKey, unshieldedKeystore };
+  const wallet = new WalletFacade(shieldedWallet, unshieldedWallet, dustWallet);
+  await wallet.start(shieldedSecretKeys, dustSecretKey);
+
+  return { wallet, shieldedSecretKeys, dustSecretKey, unshieldedKeystore };
+}
+
+function signTransactionIntents(tx: any, signFn: (payload: Uint8Array) => any, proofMarker: 'proof' | 'pre-proof'): void {
+  if (!tx.intents || tx.intents.size === 0) return;
+  for (const segment of tx.intents.keys()) {
+    const intent = tx.intents.get(segment);
+    if (!intent) continue;
+    const cloned = ledger.Intent.deserialize('signature', proofMarker, 'pre-binding', intent.serialize());
+    const sigData = cloned.signatureData(segment);
+    const signature = signFn(sigData);
+    if (cloned.fallibleUnshieldedOffer) {
+      const sigs = cloned.fallibleUnshieldedOffer.inputs.map((_: any, i: number) =>
+        cloned.fallibleUnshieldedOffer!.signatures.at(i) ?? signature);
+      cloned.fallibleUnshieldedOffer = cloned.fallibleUnshieldedOffer.addSignatures(sigs);
+    }
+    if (cloned.guaranteedUnshieldedOffer) {
+      const sigs = cloned.guaranteedUnshieldedOffer.inputs.map((_: any, i: number) =>
+        cloned.guaranteedUnshieldedOffer!.signatures.at(i) ?? signature);
+      cloned.guaranteedUnshieldedOffer = cloned.guaranteedUnshieldedOffer.addSignatures(sigs);
+    }
+    tx.intents.set(segment, cloned);
+  }
 }
 
 async function createProviders(walletCtx: Awaited<ReturnType<typeof createWallet>>, zkConfigPath: string, stateStoreName: string) {
@@ -167,8 +183,9 @@ async function createProviders(walletCtx: Awaited<ReturnType<typeof createWallet
         { ttl: ttl ?? new Date(Date.now() + 30 * 60 * 1000) },
       );
       const signFn = (payload: Uint8Array) => walletCtx.unshieldedKeystore.signData(payload);
-      const signedRecipe = await walletCtx.wallet.signRecipe(recipe, signFn);
-      return walletCtx.wallet.finalizeRecipe(signedRecipe);
+      signTransactionIntents(recipe.baseTransaction, signFn, 'proof');
+      if (recipe.balancingTransaction) signTransactionIntents(recipe.balancingTransaction, signFn, 'pre-proof');
+      return walletCtx.wallet.finalizeRecipe(recipe);
     },
     submitTx: (tx: any) => walletCtx.wallet.submitTransaction(tx) as any,
   };
@@ -176,7 +193,7 @@ async function createProviders(walletCtx: Awaited<ReturnType<typeof createWallet
   const zkConfigProvider = new NodeZkConfigProvider(zkConfigPath);
 
   return {
-    privateStateProvider: levelPrivateStateProvider({ privateStateStoreName: stateStoreName, walletProvider, privateStoragePasswordProvider: () => `${stateStoreName}_Tv1!`, accountId: walletCtx.unshieldedKeystore.getBech32Address().asString() }),
+    privateStateProvider: levelPrivateStateProvider({ privateStateStoreName: stateStoreName, walletProvider }),
     publicDataProvider: indexerPublicDataProvider(CONFIG.indexer, CONFIG.indexerWS),
     zkConfigProvider,
     proofProvider: httpClientProofProvider(CONFIG.proofServer, zkConfigProvider),
@@ -223,7 +240,7 @@ async function deployOne(
 
   const ContractModule = await import(pathToFileURL(contractModulePath).href);
   const compiledContract = CompiledContract.make(contractDef.key, ContractModule.Contract).pipe(
-    contractDef.witnesses ? CompiledContract.withWitnesses(contractDef.witnesses) : CompiledContract.withVacantWitnesses,
+    CompiledContract.withVacantWitnesses,
     CompiledContract.withCompiledFileAssets(zkConfigPath),
   );
 
@@ -244,7 +261,7 @@ async function deployOne(
       const msg = `${err?.message || ''} ${err?.cause?.message || ''}`;
       if (msg.includes('Not enough Dust') && attempt < MAX_RETRIES) {
         const state = await Rx.firstValueFrom(walletCtx.wallet.state().pipe(Rx.filter(s => s.isSynced)));
-        console.log(`\n  ⏳ DUST: ${state.dust.balance(new Date()).toLocaleString()} — retrying in 15s (${attempt}/${MAX_RETRIES})`);
+        console.log(`\n  ⏳ DUST: ${state.dust.walletBalance(new Date()).toLocaleString()} — retrying in 15s (${attempt}/${MAX_RETRIES})`);
         await new Promise(r => setTimeout(r, 15000));
         continue;
       }
@@ -260,7 +277,7 @@ async function deployOne(
 
 async function mnemonicToSeedHex(mnemonic: string): Promise<string> {
   const { mnemonicToEntropy } = await import('@scure/bip39');
-  const { wordlist } = await import('@scure/bip39/wordlists/english.js');
+  const { wordlist } = await import('@scure/bip39/wordlists/english');
   const entropy = mnemonicToEntropy(mnemonic.trim(), wordlist);
   return Buffer.from(entropy).toString('hex');
 }
@@ -314,7 +331,7 @@ async function main() {
   }
 
   // Register for DUST if needed
-  const dustBalance = state.dust.balance(new Date());
+  const dustBalance = state.dust.walletBalance(new Date());
   if (dustBalance === 0n) {
     console.log('\n  Registering for DUST generation...');
     const nightUtxos = state.unshielded.availableCoins.filter((c: any) => !c.meta?.registeredForDustGeneration);
@@ -331,7 +348,7 @@ async function main() {
       walletCtx.wallet.state().pipe(
         Rx.throttleTime(5000),
         Rx.filter(s => s.isSynced),
-        Rx.filter(s => s.dust.balance(new Date()) > 0n),
+        Rx.filter(s => s.dust.walletBalance(new Date()) > 0n),
       )
     );
     console.log('  ✓ DUST ready');

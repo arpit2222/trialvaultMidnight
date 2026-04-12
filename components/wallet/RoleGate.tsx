@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAccount, useWriteContract } from "wagmi";
 import { toast } from "sonner";
 import { runTxStatus } from "@/lib/tx";
 import { Card } from "@/components/ui/card";
@@ -10,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
 import { useRole } from "@/hooks/useRole";
 import { useRoleStore } from "@/store/roleStore";
-import { contractAddresses, registryAbi } from "@/lib/midnight/contracts";
+import { useMidnight } from "@/lib/midnight/context";
 import { setDemoRole, isDemoMode } from "@/lib/demo/roleService";
 import type { DemoRole } from "@/lib/demo/roleService";
 
@@ -32,11 +31,14 @@ export function RoleGate({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { address, isConnected } = useAccount();
+  const { isConnected, userId, displayAddress, hasLace, laceApi } = useMidnight();
   const { role, isLoading } = useRole();
   const { setRole } = useRoleStore();
-  const { writeContractAsync } = useWriteContract();
   const [isRegistering, setIsRegistering] = useState(false);
+
+  // Use on-chain registration only when Lace wallet is actually connected.
+  // MetaMask / demo users always use local storage regardless of contract deployment.
+  const useLaceOnChain = Boolean(hasLace && laceApi);
 
   // Redirect once role is known and doesn't match this portal.
   useEffect(() => {
@@ -84,28 +86,36 @@ export function RoleGate({
     ];
 
     async function register(selectedRole: DemoRole) {
-      if (!address) return;
       setIsRegistering(true);
       try {
-        if (isDemoMode()) {
-          // Demo mode: persist role locally, simulate tx feedback.
+        if (useLaceOnChain) {
+          // Lace wallet connected → register on registry.compact via server-side wallet.
+          if (!userId) { toast.error("No wallet connected"); return; }
+          const userIdHex = Array.from(userId)
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join("");
           await runTxStatus();
-          setDemoRole(address, selectedRole);
+          const res = await fetch("/api/midnight/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: userIdHex, role: selectedRole }),
+          });
+          const data = (await res.json()) as { success?: boolean; error?: string };
+          if (!res.ok || !data.success) throw new Error(data.error ?? "Registration failed");
+          setRole(selectedRole);
+          toast.success("Role registered on-chain");
+          router.replace(selectedRole === "pharma" ? "/pharma" : "/patient");
+        } else {
+          // No Lace wallet → demo / EVM mode: persist role locally.
+          if (!displayAddress) { toast.error("No wallet connected"); return; }
+          await runTxStatus();
+          setDemoRole(displayAddress, selectedRole);
           setRole(selectedRole);
           toast.success(`Registered as ${selectedRole}`);
           router.replace(selectedRole === "pharma" ? "/pharma" : "/patient");
-        } else {
-          // Production: register on registry.compact.
-          await runTxStatus();
-          await writeContractAsync({
-            address: contractAddresses.registry as `0x${string}`,
-            abi: registryAbi,
-            functionName: selectedRole === "pharma" ? "registerAsPharma" : "registerAsPatient",
-          });
-          toast.success("Role registered on-chain");
         }
-      } catch {
-        toast.error("Registration failed — check console for details");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Registration failed");
       } finally {
         setIsRegistering(false);
       }
@@ -118,7 +128,7 @@ export function RoleGate({
           <h2 className="mt-3 text-3xl font-semibold text-white">Select your role</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             This is recorded on-chain and cannot be changed later.
-            {isDemoMode() && (
+            {!useLaceOnChain && (
               <span className="ml-1 text-amber-300">(Demo mode — stored locally)</span>
             )}
           </p>

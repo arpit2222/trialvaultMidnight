@@ -10,20 +10,29 @@
     "prepare": "husky install",
     "generate-wallet": "node scripts/generate-wallet.mjs",
     "compile": "compact compile contracts/",
-    "deploy": "ts-node --esm contracts/deploy/deploy.ts",
-    "deploy:reset": "ts-node --esm contracts/deploy/deploy.ts --reset",
-    "deploy:dry": "ts-node --esm contracts/deploy/deploy.ts --dry-run",
+    "deploy": "npx tsx --tsconfig contracts/deploy/tsconfig.json contracts/deploy/deploy.mts",
+    "deploy:reset": "npx tsx --tsconfig contracts/deploy/tsconfig.json contracts/deploy/deploy.mts --reset",
     "test": "vitest"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
+    "@midnight-ntwrk/compact-js": "^2.5.0",
+    "@midnight-ntwrk/compact-runtime": "^0.15.0",
+    "@midnight-ntwrk/ledger-v8": "^8.0.3",
     "@midnight-ntwrk/midnight-js-contracts": "^4.0.4",
     "@midnight-ntwrk/midnight-js-crypto": "file:vendor/midnight-js-crypto",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-level-private-state-provider": "^4.0.4",
     "@midnight-ntwrk/midnight-js-network-id": "^4.0.4",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "^4.0.4",
     "@midnight-ntwrk/midnight-js-types": "^4.0.4",
     "@midnight-ntwrk/midnight-js-utils": "^4.0.4",
-    "@midnight-ntwrk/wallet": "^5.0.0",
-    "@midnight-ntwrk/wallet-api": "^5.0.0",
+    "@midnight-ntwrk/wallet-sdk-dust-wallet": "^3.0.0",
+    "@midnight-ntwrk/wallet-sdk-facade": "^3.0.0",
+    "@midnight-ntwrk/wallet-sdk-hd": "^3.0.1",
+    "@midnight-ntwrk/wallet-sdk-shielded": "^2.1.0",
+    "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "^2.1.0",
     "@pinata/sdk": "^2.1.0",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -50,10 +59,12 @@
     "react-dom": "18.2.0",
     "react-hook-form": "^7.72.1",
     "recharts": "^2.15.1",
+    "rxjs": "^7.8.2",
     "sonner": "^1.7.2",
     "tailwind-merge": "^2.6.0",
     "viem": "^2.47.12",
     "wagmi": "^2.19.5",
+    "ws": "^8.20.0",
     "zod": "^4.3.6",
     "zustand": "^4.5.5"
   },
@@ -63,6 +74,7 @@
     "@types/node": "^20.19.39",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.0",
@@ -72,7 +84,13 @@
     "prettier": "^3.3.3",
     "tailwindcss": "^3.4.14",
     "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.5.4",
     "vitest": "^4.1.4"
+  },
+  "overrides": {
+    "@midnight-ntwrk/compact-js": {
+      "@midnight-ntwrk/compact-runtime": "0.15.0"
+    }
   }
 }
