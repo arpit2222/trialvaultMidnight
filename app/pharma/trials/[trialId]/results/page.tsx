@@ -44,7 +44,7 @@ export default function PharmaResultsPage() {
             <p className="text-xs text-muted-foreground">Tx hash: 0xabc...123 · Timestamp: 2026-04-10</p>
           </div>
         )}
-        <Button variant="outline" onClick={runTxStatus}>Commit to Chain</Button>
+        <Button variant="outline" onClick={() => void runTxStatus()}>Commit to Chain</Button>
       </Card>
 
       <Card className="border-white/10 bg-white/5 p-6 space-y-4">

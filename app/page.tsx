@@ -2,12 +2,12 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAccount } from "wagmi";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Navbar } from "@/components/layout/Navbar";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
 import { useRole } from "@/hooks/useRole";
+import { useMidnight } from "@/lib/midnight/context";
 
 /**
  * HomePage introduces TrialVault without collecting any user data.
@@ -18,7 +18,7 @@ import { useRole } from "@/hooks/useRole";
  */
 export default function HomePage() {
   const router = useRouter();
-  const { isConnected } = useAccount();
+  const { isConnected } = useMidnight();
   const { role, isLoading } = useRole();
 
   // Auto-redirect once role is resolved.

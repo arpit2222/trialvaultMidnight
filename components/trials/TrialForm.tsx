@@ -89,7 +89,7 @@ export function TrialForm() {
   }
 
   async function onSubmit(values: TrialFormValues) {
-    await runTxStatus();
+    await runTxStatus(); // logs contract hashes to console
     const trial = createTrial({
       name: values.name,
       description: values.description,
@@ -108,7 +108,7 @@ export function TrialForm() {
       },
     });
     setCreatedTrial(trial);
-    toast.success(`Trial created — ID: ${trial.id.toString()}`);
+    toast.success(`Trial created — ID: ${trial.id}`);
   }
 
   return (

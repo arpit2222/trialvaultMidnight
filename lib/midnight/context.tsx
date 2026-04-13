@@ -70,15 +70,28 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
 
   // hasLace must be reactive — the Lace extension injects window.midnight.mnLace
   // asynchronously after page load, so a synchronous check at render time returns false.
+  // Poll every 500ms for up to 10 seconds to cover slow extension injection.
   const [hasLace, setHasLace] = useState(false);
   useEffect(() => {
-    const check = () => setHasLace(isLaceAvailable());
+    if (hasLace) return; // already detected, no need to poll
+    let interval: ReturnType<typeof setInterval> | null = null;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const check = () => {
+      if (isLaceAvailable()) {
+        console.log("[TrialVault] Lace wallet detected");
+        setHasLace(true);
+        if (interval) clearInterval(interval);
+        if (timeout) clearTimeout(timeout);
+      }
+    };
     check();
-    // Extensions can be slow; re-check after short delays
-    const t1 = setTimeout(check, 300);
-    const t2 = setTimeout(check, 1000);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, []);
+    interval = setInterval(check, 500);
+    timeout = setTimeout(() => {
+      if (interval) clearInterval(interval);
+      console.warn("[TrialVault] Lace detection timed out after 10s. window.midnight =", typeof window !== "undefined" ? window.midnight : "N/A");
+    }, 10_000);
+    return () => { if (interval) clearInterval(interval); if (timeout) clearTimeout(timeout); };
+  }, [hasLace]);
 
   const connectLaceWallet = useCallback(async () => {
     setIsConnecting(true);
@@ -102,16 +115,6 @@ export function MidnightProvider({ children }: { children: ReactNode }) {
     setError(null);
   }, []);
 
-  // Auto-connect Lace if already enabled
-  useEffect(() => {
-    if (!hasLace || laceApi) return;
-    const connector = window.midnight?.mnLace;
-    if (!connector) return;
-    connector.isEnabled().then((enabled) => {
-      if (enabled) void connectLaceWallet();
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasLace]);
 
   return (
     <MidnightContext.Provider

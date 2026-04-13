@@ -18,9 +18,9 @@ export function useRole() {
   const { role, isLoading, setRole, setLoading } = useRoleStore();
   const lastUserIdRef = useRef<string | null>(null);
 
-  // Only query the on-chain registry when Lace wallet is actually connected.
-  // MetaMask/demo users always read from localStorage.
-  const useLaceOnChain = Boolean(hasLace && laceApi);
+  // All role lookups use localStorage for instant UX.
+  // On-chain registry queries are disabled to avoid slow wallet sync.
+  const useLaceOnChain = false;
 
   useEffect(() => {
     if (!isConnected || !userId) {

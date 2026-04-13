@@ -28,11 +28,11 @@ export const BUILD_DIR = path.resolve(process.cwd(), "contracts/build");
 
 export const INDEXER_HTTP =
   process.env.NEXT_PUBLIC_MIDNIGHT_INDEXER_URL ??
-  "https://indexer.preprod.midnight.network/api/v4/graphql";
+  "https://indexer.testnet.midnight.network/api/v4/graphql";
 export const INDEXER_WS = INDEXER_HTTP
   .replace(/^https/, "wss").replace(/^http/, "ws").replace(/\/graphql$/, "/graphql/ws");
 
-const NODE = process.env.NEXT_PUBLIC_MIDNIGHT_RPC_URL ?? "https://rpc.preprod.midnight.network";
+const NODE = process.env.NEXT_PUBLIC_MIDNIGHT_RPC_URL ?? "https://rpc.testnet.midnight.network";
 export const PROOF_SERVER = process.env.MIDNIGHT_PROOF_SERVER_URL ?? "http://localhost:6300";
 
 export interface ServerWallet {
@@ -65,7 +65,8 @@ async function initWallet(): Promise<ServerWallet> {
   const { ShieldedWallet } = await nodeImport<typeof import("@midnight-ntwrk/wallet-sdk-shielded")>("@midnight-ntwrk/wallet-sdk-shielded");
   const { createKeystore, InMemoryTransactionHistoryStorage, PublicKey, UnshieldedWallet } = await nodeImport<typeof import("@midnight-ntwrk/wallet-sdk-unshielded-wallet")>("@midnight-ntwrk/wallet-sdk-unshielded-wallet");
 
-  setNetworkId("preprod");
+  const desiredNetwork = process.env.NEXT_PUBLIC_MIDNIGHT_NETWORK_ID ?? "preprod";
+  setNetworkId(desiredNetwork);
   const networkId = getNetworkId();
 
   const { mnemonicToEntropy } = await nodeImport<typeof import("@scure/bip39")>("@scure/bip39");

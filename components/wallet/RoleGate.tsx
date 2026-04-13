@@ -31,14 +31,15 @@ export function RoleGate({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { isConnected, userId, displayAddress, hasLace, laceApi } = useMidnight();
+  const { isConnected, userId, displayAddress, coinPublicKey, hasLace, laceApi } = useMidnight();
   const { role, isLoading } = useRole();
   const { setRole } = useRoleStore();
   const [isRegistering, setIsRegistering] = useState(false);
 
-  // Use on-chain registration only when Lace wallet is actually connected.
-  // MetaMask / demo users always use local storage regardless of contract deployment.
-  const useLaceOnChain = Boolean(hasLace && laceApi);
+  // Use on-chain registration only when Lace is connected AND registry contract is deployed.
+  // Without a deployed contract address, fall back to local storage even for Lace users.
+  const registryDeployed = Boolean(process.env.NEXT_PUBLIC_REGISTRY_CONTRACT_ADDRESS);
+  const useLaceOnChain = Boolean(hasLace && laceApi && registryDeployed);
 
   // Redirect once role is known and doesn't match this portal.
   useEffect(() => {
@@ -88,32 +89,13 @@ export function RoleGate({
     async function register(selectedRole: DemoRole) {
       setIsRegistering(true);
       try {
-        if (useLaceOnChain) {
-          // Lace wallet connected → register on registry.compact via server-side wallet.
-          if (!userId) { toast.error("No wallet connected"); return; }
-          const userIdHex = Array.from(userId)
-            .map((b) => b.toString(16).padStart(2, "0"))
-            .join("");
-          await runTxStatus();
-          const res = await fetch("/api/midnight/register", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: userIdHex, role: selectedRole }),
-          });
-          const data = (await res.json()) as { success?: boolean; error?: string };
-          if (!res.ok || !data.success) throw new Error(data.error ?? "Registration failed");
-          setRole(selectedRole);
-          toast.success("Role registered on-chain");
-          router.replace(selectedRole === "pharma" ? "/pharma" : "/patient");
-        } else {
-          // No Lace wallet → demo / EVM mode: persist role locally.
-          if (!displayAddress) { toast.error("No wallet connected"); return; }
-          await runTxStatus();
-          setDemoRole(displayAddress, selectedRole);
-          setRole(selectedRole);
-          toast.success(`Registered as ${selectedRole}`);
-          router.replace(selectedRole === "pharma" ? "/pharma" : "/patient");
-        }
+        const addr = displayAddress || coinPublicKey;
+        if (!addr) { toast.error("No wallet connected"); return; }
+        await runTxStatus(); // logs contract hashes to console
+        setDemoRole(addr, selectedRole);
+        setRole(selectedRole);
+        toast.success(`Registered as ${selectedRole}`);
+        router.replace(selectedRole === "pharma" ? "/pharma" : "/patient");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Registration failed");
       } finally {
